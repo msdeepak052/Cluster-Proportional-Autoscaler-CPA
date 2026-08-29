@@ -9,14 +9,20 @@
 # so there is no IRSA / OIDC setup in this demo.
 #
 # Cost note: this is ~2x t3.medium on-demand + the EKS control-plane hourly
-# charge. Run `eksctl delete cluster -f eksctl/cluster.yaml` when done.
+# charge (ap-south-1 / Mumbai pricing). Run `eksctl delete cluster -f
+# eksctl/cluster.yaml` when done.
+#
+# Version note: EKS 1.35 needs a recent eksctl (>= ~0.210) and pulls
+# AmazonLinux2023 AMIs (AL2 is past EOL for current EKS). If `eksctl create`
+# rejects the version, run `aws eks describe-cluster-versions` to see which
+# Kubernetes versions your account/region currently offers.
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
   name: cpa-demo
-  region: us-east-1
-  version: "1.31"
+  region: ap-south-1
+  version: "1.35"
 
 vpc:
   clusterEndpoints:

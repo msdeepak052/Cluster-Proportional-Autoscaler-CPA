@@ -189,7 +189,7 @@ coresToReplicas: [ [1,2], [8,3], [16,5] ]
 ## Prerequisites
 
 - `aws` CLI v2 with credentials (EKS, EC2, VPC, IAM, CloudFormation).
-- `eksctl` ≥ 0.190, `kubectl`, and `helm` (only for the Helm path).
+- `eksctl` (a recent build — EKS 1.35 needs ~0.210+), `kubectl` (within one minor of 1.35), and `helm` (only for the Helm path).
 - **Cost:** EKS control plane (hourly) + 2–6 × `t3.medium`. ~30–45 min end
   to end — run cleanup when done.
 
@@ -292,7 +292,7 @@ kubectl -n kube-system get deploy coredns -w
 Terminal 2:
 
 ```bash
-eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes 4
+eksctl scale nodegroup --cluster cpa-demo --region ap-south-1 --name ng-1 --nodes 4
 ```
 
 - New nodes take 1–3 min to join.
@@ -302,7 +302,7 @@ eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes
 Then push to 6:
 
 ```bash
-eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes 6
+eksctl scale nodegroup --cluster cpa-demo --region ap-south-1 --name ng-1 --nodes 6
 ```
 
 - → CoreDNS scales to **6**, one pod per node.
@@ -318,7 +318,7 @@ eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes
 ## 6. Scale back down
 
 ```bash
-eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes 2
+eksctl scale nodegroup --cluster cpa-demo --region ap-south-1 --name ng-1 --nodes 2
 ```
 
 - As nodes drain and their `Node` objects disappear, CPA scales CoreDNS back
