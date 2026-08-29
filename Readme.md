@@ -1,3 +1,5 @@
+<img width="1774" height="887" alt="CPA2" src="https://github.com/user-attachments/assets/6b27503b-b28b-4f9c-b483-3eb2aeb59d43" />
+
 <img width="1536" height="1024" alt="CPA" src="https://github.com/user-attachments/assets/f8dc8b60-88cf-45d9-96bc-9d233b06511d" />
 
 
