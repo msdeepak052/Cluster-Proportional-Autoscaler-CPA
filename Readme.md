@@ -227,6 +227,9 @@ eksctl create cluster -f eksctl/cluster.yaml
 
 <img width="1842" height="718" alt="image" src="https://github.com/user-attachments/assets/71468ea8-b066-4f40-baa4-3fecc54bab04" />
 
+<img width="1842" height="976" alt="image" src="https://github.com/user-attachments/assets/1e0dc161-dcb7-4485-ae26-91a92d96ad02" />
+
+
 ```bash
 eksctl utils write-kubeconfig --cluster cpa-demo-deepak --region ap-south-1
 
