@@ -1,4 +1,4 @@
-<img width="1369" height="1149" alt="CPA" src="https://github.com/user-attachments/assets/b6554bb9-3bfe-4d12-a325-0deeb56aeab3" />
+<img width="1536" height="1024" alt="CPA" src="https://github.com/user-attachments/assets/f8dc8b60-88cf-45d9-96bc-9d233b06511d" />
 
 
 Scale a cluster add-on by **cluster size** (number of nodes and CPU cores),
