@@ -257,6 +257,8 @@ kubectl get nodes
 - EKS control-plane nodes never show here → CPA's node count is exactly your
   worker count.
 
+<img width="1069" height="113" alt="image" src="https://github.com/user-attachments/assets/37a712f8-59c2-4c45-8124-3015bf75b978" />
+
 ---
 
 ## 2. Check the starting state
@@ -264,6 +266,22 @@ kubectl get nodes
 ```bash
 kubectl -n kube-system get deploy coredns
 kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu
+```
+
+Output
+
+
+```bash
+
+deepakrk@dkrullzzz:/m/l/S/k/A/CPA-CoreDNS-Demo (main)
+➜ kubectl -n kube-system get deploy coredns
+NAME      READY   UP-TO-DATE   AVAILABLE   AGE
+coredns   2/2     2            2           6m58s
+deepakrk@dkrullzzz:/m/l/S/k/A/CPA-CoreDNS-Demo (main)
+➜ kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu
+NAME                                            CPU
+ip-192-168-30-255.ap-south-1.compute.internal   2
+ip-192-168-82-212.ap-south-1.compute.internal   2
 ```
 
 - CoreDNS starts at **2 replicas**, fixed.
@@ -277,6 +295,9 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu
 helm install coredns-autoscaler ./helm -n kube-system
 kubectl -n kube-system rollout status deploy/coredns-autoscaler
 ```
+
+<img width="1386" height="548" alt="image" src="https://github.com/user-attachments/assets/faafe198-4e37-4729-9d20-6510abdcb93c" />
+
 
 - Install into `kube-system` so the release namespace matches where CoreDNS
   lives — CPA resolves `--target` and its ConfigMap in that namespace.
@@ -322,6 +343,9 @@ kubectl -n kube-system get deploy coredns      # back to 2
 - **Never also put an HPA on CoreDNS** — the two would fight over
   `.spec.replicas`.
 
+<img width="1363" height="469" alt="image" src="https://github.com/user-attachments/assets/a9d0612f-2452-4575-b57e-9318b74e5ca5" />
+
+
 ---
 
 ## 5. Scale up → watch CoreDNS follow
@@ -356,6 +380,9 @@ eksctl scale nodegroup --cluster cpa-demo-deepak --region ap-south-1 --name ng-1
 | 4 | 8 | 4 | 2 | **4** |
 | 6 | 12 | 6 | 3 | **6** |
 
+<img width="1835" height="1029" alt="image" src="https://github.com/user-attachments/assets/02f23751-3c4a-4816-b859-6d1122ea3158" />
+
+
 ---
 
 ## 6. Scale back down
@@ -367,6 +394,8 @@ eksctl scale nodegroup --cluster cpa-demo-deepak --region ap-south-1 --name ng-1
 - As nodes drain and their `Node` objects disappear, CPA scales CoreDNS back
   toward **2** (the `min`).
 - Scale-in trails the nodegroup by a minute or two — expected.
+
+<img width="1835" height="1029" alt="image" src="https://github.com/user-attachments/assets/a07e1d6b-8780-4ff5-9baf-f6b14e87c1a4" />
 
 ---
 
