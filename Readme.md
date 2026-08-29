@@ -1,5 +1,8 @@
 # Cluster Proportional Autoscaler walkthrough — scaling cluster add-ons by size, not load.
 
+<img width="1369" height="1149" alt="CPA" src="https://github.com/user-attachments/assets/b6554bb9-3bfe-4d12-a325-0deeb56aeab3" />
+
+
 Scale a cluster add-on by **cluster size** (number of nodes and CPU cores),
 not by traffic or CPU load.
 
