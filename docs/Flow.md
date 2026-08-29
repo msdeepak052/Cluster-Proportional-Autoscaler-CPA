@@ -6,7 +6,7 @@
 
 ```text
 AWS
-└── EKS cluster: cpa-demo
+└── EKS cluster: cpa-demo-deepak
     └── managed nodegroup: ng-1
         └── EC2 Auto Scaling Group   desired = 2  (min 2, max 6)
 
