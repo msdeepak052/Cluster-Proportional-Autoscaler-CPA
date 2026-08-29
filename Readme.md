@@ -16,47 +16,158 @@ CoreDNS `2 → 4 → 6` replicas, within ~10 s of each node joining.
 
 ## What is CPA?
 
-- A single controller Deployment that runs next to the add-on it manages.
+- A single controller — one Deployment (`coredns-autoscaler`), one pod, one
+  small Go binary — running in `kube-system` next to the add-on it manages.
 
-- Every ~10 s it:
-  - counts schedulable **nodes** and **cores**
-  - reads a **ConfigMap** of scaling rules
-  - computes a target replica count
-  - writes it to the target's `.spec.replicas`
+- It scales its target on **cluster size only**: the number of schedulable
+  nodes and total CPU cores. It never looks at traffic, CPU load, or any
+  metric.
 
-- No metrics-server. No HPA. No CRD. Just node count + a ConfigMap.
+- Nothing else is installed: **no metrics-server, no HPA object, no CRD, no
+  webhook.** Just this pod plus one ConfigMap.
 
-- Typical targets: **CoreDNS**, kube-proxy, ingress controllers,
-  `metrics-server` — add-ons that should grow with the cluster but have no
-  useful per-pod load signal.
-
-```
- nodes + cores ─┐
-                ├─→  CPA controller  ──→  set coredns .spec.replicas
- ConfigMap ─────┘        (loops continuously, every ~10s)
-```
-
-See [`docs/cpa-architecture.svg`](docs/cpa-architecture.svg) for the full
-picture, and [`Flow.md`](Flow.md) for a step-by-step model.
+- Good for add-ons that should grow with the cluster but have no useful
+  per-pod load signal: **CoreDNS**, kube-proxy, ingress controllers,
+  `metrics-server`.
 
 ---
 
-## How it scales — two modes
+## How it works
 
-Pick **one** in the ConfigMap.
+### 1. What tells CPA what to do
 
-**Linear** — replicas rise on a straight line with cluster size:
+Three **container flags** in
+[`manifests/20-cpa-deployment.yaml`](manifests/20-cpa-deployment.yaml) wire
+it up:
+
+| Flag | Purpose |
+|---|---|
+| `--target=deployment/coredns` | the workload to resize |
+| `--configmap=coredns-autoscaler` | the ConfigMap holding the scaling rules |
+| `--namespace=kube-system` | where the target and the ConfigMap live |
+| `--poll-period-seconds=10` | how often the loop runs |
+
+### 2. How it connects to the cluster
+
+- CPA talks **only to the Kubernetes API server** — no AWS calls, no metrics
+  backend.
+
+- It authenticates as the `cpa` ServiceAccount, bound to a ClusterRole
+  ([`manifests/00-cpa-rbac.yaml`](manifests/00-cpa-rbac.yaml)) that grants
+  exactly three things:
+  - `get / list / watch` **nodes** — cluster-wide, to count them
+  - `get / update` **deployments/scale** — to read and set the replica count
+  - `get / create` **configmaps** — to read the rules (create only when
+    seeding from `--default-params`)
+
+### 3. The control loop — every `--poll-period-seconds` (~10 s)
 
 ```
-replicas = max( ceil(nodes / nodesPerReplica), ceil(cores / coresPerReplica) )
-replicas = clamp(replicas, min, max)
+1. LIST nodes           → N = schedulable nodes,  C = Σ node.status.capacity.cpu
+2. GET  the ConfigMap   → parse its linear / ladder rules   (re-read every loop)
+3. compute              → desired = f(N, C, rules)
+4. GET  coredns /scale  → current replicas
+5. if desired ≠ current → UPDATE coredns /scale   (.spec.replicas = desired)
+6. sleep, repeat
 ```
 
-**Ladder** — replicas step up at fixed thresholds:
+- **Stateless** — each loop recomputes from scratch; a missed loop is just
+  corrected on the next one.
+
+- Step 5 writes the same `/scale` subresource that `kubectl scale` uses.
+  After that it is ordinary Kubernetes: Deployment → ReplicaSet → pods added
+  or removed, scheduler places them. CPA does not watch the rollout.
+
+- Because CPA rewrites `.spec.replicas` every loop, **it owns that number** —
+  a manual `kubectl scale`, or a second autoscaler on the same target, is
+  overwritten within ~10 s. (So never put an HPA on CoreDNS as well.)
+
+```
+ ┌───────────────────────── kube-system ─────────────────────────┐
+ │  Node objects ─┐                                              │
+ │  (N, C)        ├──▶  coredns-autoscaler  ──▶  coredns/scale    │
+ │  ConfigMap ────┘        (CPA pod)          (.spec.replicas)    │
+ │  (linear/ladder)     loop every ~10s              │           │
+ │                                                   ▼           │
+ │                                    ReplicaSet ──▶ CoreDNS Pods │
+ └──────────────────────────────────────────────────────────────┘
+```
+
+See [`docs/cpa-architecture.svg`](docs/cpa-architecture.svg) for the full
+picture and [`Flow.md`](Flow.md) for a step-by-step model.
+
+---
+
+## The ConfigMap — the live control surface
+
+- The scaling rules live in a **ConfigMap**, not in flags or the Deployment
+  spec, so you re-tune scaling without redeploying CPA.
+
+- It holds **exactly one** of `linear` or `ladder`, as a JSON string:
+
+  ```yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: coredns-autoscaler      # matches --configmap
+    namespace: kube-system        # matches --namespace
+  data:
+    linear: |-
+      { "coresPerReplica": 4, "nodesPerReplica": 1, "min": 2, "max": 10,
+        "preventSinglePointFailure": true, "includeUnschedulableNodes": true }
+  ```
+
+- CPA **re-reads it every loop**, so an edit applies within ~10 s — no
+  restart, no rollout:
+
+  ```bash
+  kubectl -n kube-system edit configmap coredns-autoscaler
+  ```
+
+- `--default-params='<json>'` on the CPA Deployment is a fallback only: if
+  the ConfigMap is missing at startup, CPA **creates** it from that JSON. If
+  the ConfigMap exists, `--default-params` is ignored and the ConfigMap
+  wins.
+
+---
+
+## Scaling modes
+
+Set **one** of these in the ConfigMap.
+
+### Linear — replicas rise on a straight line with cluster size
+
+```
+replicasFromNodes = ceil( N / nodesPerReplica )
+replicasFromCores = ceil( C / coresPerReplica )
+desired           = max( replicasFromNodes, replicasFromCores )
+desired           = clamp( desired, min, max )
+```
+
+| Field | Meaning |
+|---|---|
+| `nodesPerReplica` | one replica per this many nodes (fractions allowed, e.g. `0.5`) |
+| `coresPerReplica` | one replica per this many CPU cores |
+| `min` / `max` | replica floor / ceiling |
+| `preventSinglePointFailure` | if the formula gives `1`, use `2` |
+| `includeUnschedulableNodes` | also count cordoned / NotReady nodes |
+
+- The result is the **larger** of the node-based and core-based numbers,
+  then clamped.
+
+### Ladder — replicas step up at fixed thresholds
 
 ```
 nodesToReplicas: [ [1,2], [3,3], [5,5] ]     # 2 nodes→2, 4 nodes→3, 6 nodes→5
+coresToReplicas: [ [1,2], [8,3], [16,5] ]
 ```
+
+- Each pair is `[threshold, replicas]`. CPA takes the replicas of the
+  **highest pair whose threshold ≤ the current count**, for nodes and cores
+  separately, then uses the larger.
+
+- No `min` / `max` / `preventSinglePointFailure` — the ladder is the whole
+  spec. Keep a `[1, N]` floor entry or a tiny cluster scales to `0`.
 
 ---
 
@@ -241,23 +352,6 @@ kubectl delete -f manifests/ --ignore-not-found
 kubectl -n kube-system scale deploy/coredns --replicas=2    # if keeping the cluster
 eksctl delete cluster -f eksctl/cluster.yaml
 ```
-
----
-
-## Config reference — linear
-
-[`manifests/10-cpa-configmap-linear.yaml`](manifests/10-cpa-configmap-linear.yaml):
-
-| Field | Meaning |
-|---|---|
-| `coresPerReplica` | one replica per this many cores |
-| `nodesPerReplica` | one replica per this many nodes (fractions allowed) |
-| `min` / `max` | replica floor / ceiling |
-| `preventSinglePointFailure` | if the formula gives 1, use 2 |
-| `includeUnschedulableNodes` | count cordoned / NotReady nodes too |
-
-- Result = **max** of the nodes calc and the cores calc, then clamped.
-- Exactly **one** of `linear` / `ladder` may be present.
 
 ---
 
