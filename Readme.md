@@ -36,9 +36,8 @@ CoreDNS `2 → 4 → 6` replicas, within ~10 s of each node joining.
 
 ### 1. What tells CPA what to do
 
-Three **container flags** in
-[`manifests/20-cpa-deployment.yaml`](manifests/20-cpa-deployment.yaml) wire
-it up:
+Three **container flags**, set from [`helm/values.yaml`](helm/values.yaml)
+(`target`, `pollPeriodSeconds`, `config`), wire it up:
 
 | Flag | Purpose |
 |---|---|
@@ -52,9 +51,9 @@ it up:
 - CPA talks **only to the Kubernetes API server** — no AWS calls, no metrics
   backend.
 
-- It authenticates as the `cpa` ServiceAccount, bound to a ClusterRole
-  ([`manifests/00-cpa-rbac.yaml`](manifests/00-cpa-rbac.yaml)) that grants
-  exactly three things:
+- It authenticates as a ServiceAccount bound to a ClusterRole
+  ([`helm/templates/clusterrole.yaml`](helm/templates/clusterrole.yaml)) that
+  grants exactly three things:
   - `get / list / watch` **nodes** — cluster-wide, to count them
   - `get / update` **deployments/scale** — to read and set the replica count
   - `get / create` **configmaps** — to read the rules (create only when
@@ -176,11 +175,10 @@ coresToReplicas: [ [1,2], [8,3], [16,5] ]
 | Path | What |
 |---|---|
 | [`eksctl/cluster.yaml`](eksctl/cluster.yaml) | EKS cluster + managed nodegroup (2 nodes, min 2 / max 6) |
-| [`manifests/00-cpa-rbac.yaml`](manifests/00-cpa-rbac.yaml) | ServiceAccount + RBAC: read nodes, write `deployments/scale` |
-| [`manifests/10-cpa-configmap-linear.yaml`](manifests/10-cpa-configmap-linear.yaml) | Linear policy (default) |
-| [`manifests/11-cpa-configmap-ladder.yaml`](manifests/11-cpa-configmap-ladder.yaml) | Ladder policy (swap-in) |
-| [`manifests/20-cpa-deployment.yaml`](manifests/20-cpa-deployment.yaml) | The CPA controller, targeting `deployment/coredns` |
-| [`helm/cpa-values.yaml`](helm/cpa-values.yaml) | Same setup via the Helm chart |
+| [`helm/`](helm/) | Helm chart — the primary install path |
+| [`helm/values.yaml`](helm/values.yaml) | All the knobs: image, `target`, `pollPeriodSeconds`, `config.mode` + `linear`/`ladder` blocks, RBAC |
+| [`helm/templates/`](helm/templates/) | ServiceAccount, ClusterRole(+Binding), ConfigMap, Deployment |
+| [`manifests/`](manifests/) | The same objects as plain YAML, for a no-Helm `kubectl apply` |
 
 ---
 
@@ -229,22 +227,28 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu
 ## 3. Install CPA
 
 ```bash
+helm install coredns-autoscaler ./helm -n kube-system
+kubectl -n kube-system rollout status deploy/coredns-autoscaler
+```
+
+- Install into `kube-system` so the release namespace matches where CoreDNS
+  lives — CPA resolves `--target` and its ConfigMap in that namespace.
+- Override any value inline, e.g.:
+
+  ```bash
+  helm install coredns-autoscaler ./helm -n kube-system \
+    --set config.linear.nodesPerReplica=0.5 \
+    --set pollPeriodSeconds=15
+  ```
+
+<details>
+<summary>No-Helm alternative (don't run both)</summary>
+
+```bash
 kubectl apply -f manifests/00-cpa-rbac.yaml
 kubectl apply -f manifests/10-cpa-configmap-linear.yaml
 kubectl apply -f manifests/20-cpa-deployment.yaml
 kubectl -n kube-system rollout status deploy/coredns-autoscaler
-```
-
-<details>
-<summary>Helm alternative (don't run both)</summary>
-
-```bash
-helm repo add cluster-proportional-autoscaler \
-  https://kubernetes-sigs.github.io/cluster-proportional-autoscaler
-helm repo update
-helm install coredns-autoscaler \
-  cluster-proportional-autoscaler/cluster-proportional-autoscaler \
-  -n kube-system -f helm/cpa-values.yaml
 ```
 </details>
 
@@ -322,13 +326,15 @@ eksctl scale nodegroup --cluster cpa-demo --region us-east-1 --name ng-1 --nodes
 ## 7. Try ladder mode (optional)
 
 ```bash
-kubectl apply -f manifests/11-cpa-configmap-ladder.yaml
+helm upgrade coredns-autoscaler ./helm -n kube-system --set config.mode=ladder
 ```
 
-- CPA picks up the new ConfigMap on its next poll — no restart.
-- This ladder: 2 nodes → **2**, 4 nodes → **3**, 6 nodes → **5**.
+- Re-renders the ConfigMap; CPA picks it up on its next poll — no restart.
+- Default ladder in [`helm/values.yaml`](helm/values.yaml): 2 nodes → **2**,
+  4 nodes → **3**, 6 nodes → **5**.
 
-Or edit live:
+Or edit the live ConfigMap directly (a quick test; the next `helm upgrade`
+overwrites it):
 
 ```bash
 kubectl -n kube-system edit configmap coredns-autoscaler
@@ -340,7 +346,7 @@ kubectl -n kube-system edit configmap coredns-autoscaler
 Revert:
 
 ```bash
-kubectl apply -f manifests/10-cpa-configmap-linear.yaml
+helm upgrade coredns-autoscaler ./helm -n kube-system --reset-values
 ```
 
 ---
@@ -348,8 +354,8 @@ kubectl apply -f manifests/10-cpa-configmap-linear.yaml
 ## 8. Cleanup
 
 ```bash
-kubectl delete -f manifests/ --ignore-not-found
-kubectl -n kube-system scale deploy/coredns --replicas=2    # if keeping the cluster
+helm uninstall coredns-autoscaler -n kube-system         # or: kubectl delete -f manifests/
+kubectl -n kube-system scale deploy/coredns --replicas=2  # if keeping the cluster
 eksctl delete cluster -f eksctl/cluster.yaml
 ```
 
@@ -375,8 +381,7 @@ eksctl delete cluster -f eksctl/cluster.yaml
 **CPA pod `CrashLoopBackOff`**
 - `kubectl -n kube-system logs deploy/coredns-autoscaler --previous`
 - `nodes is forbidden` → RBAC not applied, or wrong `serviceAccountName`.
-- `failed to parse` → ConfigMap JSON is malformed, or has both `linear` and
-  `ladder`.
+- `failed to parse` → ConfigMap JSON is malformed (if you hand-edited it).
 
 **CoreDNS doesn't move after scaling the nodegroup**
 - `kubectl get nodes` — did the new nodes reach `Ready`?

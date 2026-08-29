@@ -1,0 +1,21 @@
+Cluster Proportional Autoscaler installed as "{{ include "coredns-autoscaler.fullname" . }}" in namespace "{{ .Release.Namespace }}".
+
+  Target      : {{ .Values.target.ref }}   (resolved in namespace {{ .Release.Namespace }})
+  Policy      : {{ include "coredns-autoscaler.paramsKey" . }} -> {{ include "coredns-autoscaler.params" . }}
+  Poll period : {{ .Values.pollPeriodSeconds }}s
+{{- if ne .Release.Namespace "kube-system" }}
+
+WARNING: released into "{{ .Release.Namespace }}", not "kube-system". CoreDNS
+lives in kube-system, so CPA will look for {{ .Values.target.ref }} and its
+ConfigMap there and find nothing. Reinstall with `-n kube-system`.
+{{- end }}
+
+Watch it work:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "coredns-autoscaler.fullname" . }} -f
+  kubectl -n {{ .Release.Namespace }} get deploy coredns -w
+
+Tune scaling live (applies within one poll; a later `helm upgrade` overrides it):
+  kubectl -n {{ .Release.Namespace }} edit configmap {{ include "coredns-autoscaler.configMapName" . }}
+
+Or persist a change:
+  helm upgrade {{ .Release.Name }} ./helm -n {{ .Release.Namespace }} --set config.linear.nodesPerReplica=0.5

@@ -1,0 +1,83 @@
+# Values for the coredns-autoscaler chart.
+#
+# Install into kube-system so the release namespace matches where CoreDNS
+# lives (CPA looks for --target and its ConfigMap in the release namespace):
+#
+#   helm install coredns-autoscaler ./helm -n kube-system
+#
+# Override anything below with --set / -f, e.g.:
+#   helm upgrade coredns-autoscaler ./helm -n kube-system \
+#     --set config.linear.nodesPerReplica=0.5 --set pollPeriodSeconds=15
+
+replicaCount: 1
+
+image:
+  repository: registry.k8s.io/cpa/cluster-proportional-autoscaler
+  tag: v1.9.0
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: "coredns-autoscaler"
+
+# What CPA resizes. No namespace in the ref -> CPA resolves it (and its
+# ConfigMap) in the release namespace, which must be where CoreDNS runs.
+target:
+  ref: deployment/coredns
+
+# Name of the params ConfigMap. Empty -> chart fullname.
+configMap:
+  name: coredns-autoscaler
+
+pollPeriodSeconds: 10
+logLevel: 2
+
+# Optional: only count nodes matching this label selector, e.g. "role=worker".
+nodeLabels: ""
+
+# Extra raw flags appended to the container command, e.g. ["--max-sync-failures=5"].
+extraArgs: []
+
+# Scaling policy. `mode` selects which block below is used; the other is
+# ignored. The chosen block is rendered into the ConfigMap AND into
+# --default-params.  Switch with:  --set config.mode=ladder
+config:
+  mode: linear          # linear | ladder
+
+  linear:
+    coresPerReplica: 4
+    nodesPerReplica: 1
+    min: 2
+    max: 10
+    preventSinglePointFailure: true
+    includeUnschedulableNodes: true
+
+  ladder:
+    nodesToReplicas:
+      - [1, 2]
+      - [3, 3]
+      - [5, 5]
+    coresToReplicas:
+      - [1, 2]
+      - [8, 3]
+      - [16, 5]
+
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  create: true
+
+priorityClassName: system-cluster-critical
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

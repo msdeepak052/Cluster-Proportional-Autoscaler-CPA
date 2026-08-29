@@ -1,0 +1,28 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "coredns-autoscaler.fullname" . }}
+  labels:
+    {{- include "coredns-autoscaler.labels" . | nindent 4 }}
+rules:
+# Count the cluster: schedulable nodes + Σ node.status.capacity.cpu.
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+# Resize the target via its scale subresource.
+- apiGroups: ["apps"]
+  resources: ["deployments/scale", "replicasets/scale"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["replicationcontrollers/scale"]
+  verbs: ["get", "update"]
+# Read the params ConfigMap each poll; create/update let --default-params seed it.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "update", "patch"]
+# Optional: surface scaling decisions as Events.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+{{- end }}

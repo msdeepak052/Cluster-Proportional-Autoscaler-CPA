@@ -1,0 +1,21 @@
+apiVersion: v2
+name: coredns-autoscaler
+description: >-
+  Cluster Proportional Autoscaler for CoreDNS. Runs the upstream
+  cluster-proportional-autoscaler controller as a Deployment and scales the
+  CoreDNS Deployment's replica count by the number of nodes and CPU cores in
+  the cluster. Renders the same objects as ../manifests, with the knobs
+  exposed in values.yaml.
+type: application
+version: 0.1.0
+appVersion: "v1.9.0"
+keywords:
+  - autoscaling
+  - coredns
+  - cluster-proportional-autoscaler
+  - cpa
+home: https://github.com/kubernetes-sigs/cluster-proportional-autoscaler
+sources:
+  - https://github.com/kubernetes-sigs/cluster-proportional-autoscaler
+maintainers:
+  - name: Deepak Yadav
