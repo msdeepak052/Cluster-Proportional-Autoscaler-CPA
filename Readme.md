@@ -189,9 +189,31 @@ coresToReplicas: [ [1,2], [8,3], [16,5] ]
 ## Prerequisites
 
 - `aws` CLI v2 with credentials (EKS, EC2, VPC, IAM, CloudFormation).
-- `eksctl` (a recent build — EKS 1.35 needs ~0.210+), `kubectl` (within one minor of 1.35), and `helm` (only for the Helm path).
-- **Cost:** EKS control plane (hourly) + 2–6 × `t3.medium`. ~30–45 min end
-  to end — run cleanup when done.
+- `kubectl` (within one minor of 1.35) and `helm` (only for the Helm path).
+- `eksctl` — a **recent build** (EKS 1.35 needs ~0.210+). Install or update:
+
+  ```bash
+  # Linux / macOS — amd64; use ARCH=arm64 on ARM
+  ARCH=amd64
+  PLATFORM=$(uname -s)_$ARCH
+  curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+  # optional checksum check:
+  curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_checksums.txt" \
+    | grep $PLATFORM | sha256sum --check
+  tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
+  sudo install -m 0755 /tmp/eksctl /usr/local/bin && rm /tmp/eksctl
+
+  # or, with Homebrew (macOS / Linux)
+  brew install aws/tap/eksctl
+
+  eksctl version
+  ```
+
+  Windows, checksum verification, and shell completion:
+  <https://docs.aws.amazon.com/eks/latest/eksctl/installation.html>
+
+- **Cost:** EKS control plane (hourly) + 2–6 × `t3.medium` (ap-south-1).
+  ~30–45 min end to end — run cleanup when done.
 
 All commands assume this folder is your working directory.
 
