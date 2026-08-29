@@ -1,0 +1,56 @@
+# RBAC for the Cluster Proportional Autoscaler, scoped to resize CoreDNS.
+#
+# CPA needs exactly three kinds of access -- and that is the entire security
+# surface. No aggregated API server, no auth-delegator/auth-reader, none of
+# the custom.metrics.k8s.io plumbing an HPA-on-custom-metrics setup needs:
+#
+#   1. read Nodes cluster-wide          -> count schedulable nodes + sum CPU capacity
+#   2. get/update deployments/scale     -> change coredns's .spec.replicas
+#   3. get/create the params ConfigMap  -> read (and optionally seed) linear/ladder params
+#
+# This mirrors the upstream `dns-horizontal-autoscaler` manifests that ship
+# with Kubernetes -- CPA configured for CoreDNS is exactly that component.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cpa
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cpa
+rules:
+# 1. Count the cluster.
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+# 2. Resize the target. --target=deployment/coredns -> apps/v1 deployments/scale.
+- apiGroups: ["apps"]
+  resources: ["deployments/scale", "replicasets/scale"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["replicationcontrollers/scale"]
+  verbs: ["get", "update"]
+# 3. Read the params ConfigMap each poll; create/update let CPA seed it from
+#    --default-params if it is ever missing.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "update", "patch"]
+# Optional: surface scaling decisions as Events.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cpa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cpa
+subjects:
+- kind: ServiceAccount
+  name: cpa
+  namespace: kube-system

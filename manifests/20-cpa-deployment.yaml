@@ -1,0 +1,52 @@
+# The Cluster Proportional Autoscaler itself, running in kube-system and
+# pointed at the CoreDNS Deployment. One small Go binary, one replica.
+#
+# Flags that matter:
+#   --namespace              where --target and --configmap live (kube-system)
+#   --configmap              the params ConfigMap to read every poll (10-cpa-configmap-linear.yaml)
+#   --target                 KIND/NAME to resize: deployment/coredns
+#   --poll-period-seconds    how often to re-count nodes, re-read the ConfigMap, reconcile (default 10)
+#
+# --default-params seeds the ConfigMap if it is missing, so CPA can start
+# even if 10-cpa-configmap-linear.yaml was not applied first.
+#
+# Runs on the same worker nodes as everything else. If you taint nodes or
+# want CPA to tolerate control-plane-style taints, add tolerations here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns-autoscaler
+  namespace: kube-system
+  labels:
+    app: coredns-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coredns-autoscaler
+  template:
+    metadata:
+      labels:
+        app: coredns-autoscaler
+    spec:
+      serviceAccountName: cpa
+      priorityClassName: system-cluster-critical
+      containers:
+      - name: autoscaler
+        image: registry.k8s.io/cpa/cluster-proportional-autoscaler:v1.9.0
+        command:
+        - /cluster-proportional-autoscaler
+        - --namespace=kube-system
+        - --configmap=coredns-autoscaler
+        - --target=deployment/coredns
+        - --poll-period-seconds=10
+        - --default-params={"linear":{"coresPerReplica":4,"nodesPerReplica":1,"min":2,"max":10,"preventSinglePointFailure":true,"includeUnschedulableNodes":true}}
+        - --logtostderr=true
+        - --v=2
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

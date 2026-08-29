@@ -1,0 +1,37 @@
+# The scaling policy for CoreDNS. This ConfigMap -- not a flag, not the
+# Deployment spec -- is the live control surface. CPA re-reads it every poll
+# (default 10s), so `kubectl -n kube-system edit configmap coredns-autoscaler`
+# takes effect within one poll period, no restart.
+#
+# LINEAR mode:
+#   replicasFromNodes = ceil( schedulableNodes / nodesPerReplica )
+#   replicasFromCores = ceil( schedulableCores / coresPerReplica )
+#   replicas          = max( replicasFromNodes, replicasFromCores )
+#   replicas          = clamp( replicas, min, max )
+#   if preventSinglePointFailure and replicas == 1: replicas = 2
+#
+# Tuned for THIS demo (t3.medium = 2 vCPU each) so a nodegroup resize moves
+# CoreDNS visibly:
+#
+#   2 nodes / 4 vCPU : max(ceil(2/1), ceil(4/4)) = max(2,1) = 2  -> coredns = 2
+#   4 nodes / 8 vCPU : max(ceil(4/1), ceil(8/4)) = max(4,2) = 4  -> coredns = 4
+#   6 nodes /12 vCPU : max(ceil(6/1), ceil(12/4))= max(6,3) = 6  -> coredns = 6
+#
+# Real production defaults are much flatter (e.g. nodesPerReplica: 16,
+# coresPerReplica: 256, min: 2) -- CoreDNS does not need one replica per
+# node. Those values just would not move on a 2->6 node demo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-autoscaler
+  namespace: kube-system
+data:
+  linear: |-
+    {
+      "coresPerReplica": 4,
+      "nodesPerReplica": 1,
+      "min": 2,
+      "max": 10,
+      "preventSinglePointFailure": true,
+      "includeUnschedulableNodes": true
+    }

@@ -1,0 +1,47 @@
+# eksctl ClusterConfig for the CPA + CoreDNS demo.
+#
+#   eksctl create cluster -f eksctl/cluster.yaml
+#
+# Public cluster: the Kubernetes API endpoint is reachable from the internet
+# (publicAccess: true). Lock it down with publicAccessCIDRs if you want.
+# eksctl creates the VPC, subnets, cluster IAM role and node IAM role for
+# you -- CPA itself needs NO AWS IAM (it only talks to the Kubernetes API),
+# so there is no IRSA / OIDC setup in this demo.
+#
+# Cost note: this is ~2x t3.medium on-demand + the EKS control-plane hourly
+# charge. Run `eksctl delete cluster -f eksctl/cluster.yaml` when done.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: cpa-demo
+  region: us-east-1
+  version: "1.31"
+
+vpc:
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+  # publicAccessCIDRs: ["<your.ip>/32"]   # optional: restrict who can reach the API
+
+iam:
+  withOIDC: true   # not required by CPA; handy if you add IRSA-based tools later
+
+managedNodeGroups:
+  - name: ng-1
+    instanceType: t3.medium      # 2 vCPU, 4 GiB -> 2 nodes = 4 vCPU
+    amiFamily: AmazonLinux2023
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 6
+    volumeSize: 20
+    labels:
+      role: worker
+    # eksctl attaches the standard worker policies automatically.
+
+# CoreDNS / kube-proxy / vpc-cni are installed by EKS as managed add-ons by
+# default. See the Readme for the one caveat this creates for CPA.
+addons:
+  - name: vpc-cni
+  - name: kube-proxy
+  - name: coredns

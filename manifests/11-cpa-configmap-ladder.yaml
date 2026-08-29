@@ -1,0 +1,38 @@
+# LADDER mode: a step function instead of a straight line. Apply this
+# INSTEAD of 10-cpa-configmap-linear.yaml (same ConfigMap name, so it
+# overwrites) when you want fixed CoreDNS replica counts at fixed cluster
+# sizes rather than a continuous ratio.
+#
+#   kubectl apply -f manifests/11-cpa-configmap-ladder.yaml
+#
+# Each array is a sorted list of [threshold, replicas]. CPA takes the
+# replicas of the HIGHEST pair whose threshold <= current count, does it for
+# nodes and cores independently, and uses the max.
+#
+#   nodesToReplicas below:
+#     2 nodes -> highest matching pair is [1,2]  -> 2
+#     4 nodes -> highest matching pair is [3,3]  -> 3
+#     6 nodes -> highest matching pair is [5,5]  -> 5
+#
+# GOTCHA: below the first threshold a ladder yields 0. Keep a [1, N] floor
+# entry. Ladder mode has no min / max / preventSinglePointFailure -- the
+# ladder is the whole spec.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-autoscaler
+  namespace: kube-system
+data:
+  ladder: |-
+    {
+      "coresToReplicas": [
+        [ 1, 2 ],
+        [ 8, 3 ],
+        [ 16, 5 ]
+      ],
+      "nodesToReplicas": [
+        [ 1, 2 ],
+        [ 3, 3 ],
+        [ 5, 5 ]
+      ]
+    }
