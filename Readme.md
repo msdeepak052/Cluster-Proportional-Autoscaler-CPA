@@ -93,7 +93,9 @@ Three **container flags**, set from [`helm/values.yaml`](helm/values.yaml)
 ```
 
 See [`docs/cpa-architecture.svg`](docs/cpa-architecture.svg) for the full
-picture and [`Flow.md`](Flow.md) for a step-by-step model.
+picture, [`docs/Flow.md`](docs/Flow.md) for a step-by-step model, and
+[`docs/LinearVSLadder.md`](docs/LinearVSLadder.md) for a worked linear-vs-ladder
+comparison.
 
 ---
 
