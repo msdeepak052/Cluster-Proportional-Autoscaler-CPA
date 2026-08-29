@@ -225,8 +225,13 @@ All commands assume this folder is your working directory.
 eksctl create cluster -f eksctl/cluster.yaml
 ```
 
+<img width="1842" height="718" alt="image" src="https://github.com/user-attachments/assets/71468ea8-b066-4f40-baa4-3fecc54bab04" />
+
+
 - ~15–20 min. Creates the VPC, a public API endpoint, IAM roles, nodegroup
   `ng-1` (2 nodes), and the CoreDNS add-on. kubeconfig is set for you.
+
+
 
 ```bash
 kubectl get nodes
